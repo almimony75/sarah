@@ -60,6 +60,25 @@ It also creates the required configuration files.
 
 The server loads the models, starts the background tool service, and listens for WebSocket connections on port **9000**.
 
+### 5. Test the server
+
+Sarah currently exposes a WebSocket API. Until a dedicated client is available, you can use the included test client to send a `.wav` file and verify that everything is working.
+
+The test client will:
+
+- Connect to the Sarah server
+- Send a WAV file for transcription
+- Receive the generated response
+- Save the returned audio as `reply.wav`
+
+Run it like this:
+
+```bash
+python3 test_client.py --wav path/to/audio.wav
+```
+
+> **Note:** The best results come from a **16 kHz, mono, 16-bit PCM WAV** file, which matches the expected input format for the speech recognition model.
+
 ## Why?
 
 Mostly because I wanted a local JARVIS that didn't depend on cloud services.
