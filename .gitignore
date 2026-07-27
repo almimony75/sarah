@@ -1,0 +1,30 @@
+# build and compiler
+build/
+CMakeCache.txt
+CMakeFiles/
+*.o
+*.a
+*.so
+Sarah_Core
+
+# vendor stuff cloned automatically by setup.sh
+vendor/
+
+# models ownloaded automatically by download_models.sh)
+models/
+*.bin
+*.gguf
+*.onnx
+
+# config and python are generated automatically by download_models.sh
+config/
+mcp_server.py
+.venv/
+__pycache__/
+*.pyc
+
+# logs
+*.log
+compile_logs.txt
+.DS_Store
+Thumbs.db
