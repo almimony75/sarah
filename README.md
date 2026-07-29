@@ -62,7 +62,7 @@ The server loads the models, starts the background tool service, and listens for
 
 ### 5. Test the server
 
-Sarah currently exposes a WebSocket API. Once Sarah is running start a [Sarah Satellite](https://github.com/almimony75/satellite) client.
+Sarah currently exposes a WebSocket API. Once Sarah is running start a [Sarah Satellite](https://github.com/almimony75/sarah-satellite) client.
 
 The satellite listens for the wake word records your voice sends it to Sarah and plays back the response.
 
