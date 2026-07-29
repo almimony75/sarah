@@ -5,6 +5,7 @@ CMakeFiles/
 *.o
 *.a
 *.so
+.cache
 Sarah_Core
 
 # vendor stuff cloned automatically by setup.sh
@@ -28,3 +29,4 @@ __pycache__/
 compile_logs.txt
 .DS_Store
 Thumbs.db
+memory_db.json

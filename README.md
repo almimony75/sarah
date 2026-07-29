@@ -62,16 +62,20 @@ The server loads the models, starts the background tool service, and listens for
 
 ### 5. Test the server
 
-Sarah currently exposes a WebSocket API. Until a dedicated client is available, you can use the included test client to send a `.wav` file and verify that everything is working.
+Sarah currently exposes a WebSocket API. Once Sarah is running start a [Sarah Satellite](https://github.com/almimony75/satellite) client.
 
-The test client will:
+The satellite listens for the wake word records your voice sends it to Sarah and plays back the response.
+
+### Optional: Test with the Python client
+
+The included Python client is still available if you want to test the WebSocket API directly.
+
+It will:
 
 - Connect to the Sarah server
 - Send a WAV file for transcription
 - Receive the generated response
 - Save the returned audio as `reply.wav`
-
-Run it like this:
 
 ```bash
 python3 test_client.py --wav path/to/audio.wav
