@@ -23,6 +23,7 @@ mcp_server.py
 .venv/
 __pycache__/
 *.pyc
+.clang-format
 
 # logs
 *.log
