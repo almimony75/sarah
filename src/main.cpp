@@ -10,6 +10,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <csignal>
+#include <filesystem>
 #include <functional>
 #include <fstream>
 #include <httplib.h>
@@ -39,11 +40,11 @@ int main()
 
     // 1. Load configuration & system prompt
     Utilities::logStep("Config", "Loading configuration.json ...");
-    auto config = Utilities::loadJsonConfig("config/configuration.json");
+    auto config = Utilities::loadJsonConfig(std::filesystem::path("config/configuration.json"));
     Utilities::logStep("Config", "OK");
 
     Utilities::logStep("Prompt", "Loading system_prompt.txt ...");
-    std::string systemPrompt = loadSystemPrompt("config/system_prompt.txt");
+    std::string systemPrompt = loadSystemPrompt(std::filesystem::path("config/system_prompt.txt"));
     Utilities::logStep("Prompt", "Loaded (" + std::to_string(systemPrompt.size()) + " chars)");
 
     // 2. Spawn MCP tool servers & build the tool router
@@ -107,7 +108,7 @@ int main()
     // 3. load the four heavy engines
     Utilities::logStep("STT", "Loading Whisper model: " + config["stt"]["model"].get<std::string>());
     SttEngine stt;
-    if (!stt.loadModel(config["stt"]["model"]))
+    if (!stt.loadModel(config["stt"]["model"].get<std::string>()))
     {
       std::cerr << "  [STT] FAILED to load model. Exiting.\n";
       return 1;
@@ -116,7 +117,7 @@ int main()
 
     Utilities::logStep("LLM", "Loading LLM model: " + config["llm"]["model"].get<std::string>());
     LlmEngine llm;
-    if (!llm.loadModel(config["llm"]["model"]))
+    if (!llm.loadModel(config["llm"]["model"].get<std::string>()))
     {
       std::cerr << "  [LLM] FAILED to load model. Exiting.\n";
       return 1;
@@ -126,7 +127,7 @@ int main()
     Utilities::logStep("Memory", "Initializing memory engine with: " +
                                      config["memory"]["embedding_model"].get<std::string>());
     MemoryEngine mem;
-    if (!mem.init(config["memory"]["embedding_model"]))
+    if (!mem.init(config["memory"]["embedding_model"].get<std::string>()))
     {
       std::cerr << "  [Memory] FAILED to initialize. Exiting.\n";
       return 1;
@@ -135,7 +136,7 @@ int main()
 
     Utilities::logStep("TTS", "Loading ONNX TTS model from: " + config["tts"]["model_dir"].get<std::string>());
     TtsEngine tts;
-    if (!tts.loadModel(config["tts"]["model_dir"]))
+    if (!tts.loadModel(config["tts"]["model_dir"].get<std::string>()))
     {
       std::cerr << "  [TTS] FAILED to load model. Exiting.\n";
       return 1;
