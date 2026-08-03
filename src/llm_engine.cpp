@@ -17,13 +17,13 @@ LlmEngine::~LlmEngine()
 
 void LlmEngine::freeBatch() { llama_batch_free(batch); }
 
-bool LlmEngine::loadModel(const std::string &modelPath)
+bool LlmEngine::loadModel(const std::filesystem::path &modelPath)
 {
   llama_model_params modelParams = llama_model_default_params();
   modelParams.n_gpu_layers = -1;
 
   std::cout << "[LLM] Loading model: " << modelPath << "..." << std::endl;
-  model = llama_model_load_from_file(modelPath.c_str(), modelParams);
+  model = llama_model_load_from_file(modelPath.string().c_str(), modelParams);
   if (!model)
   {
     std::cerr << "[LLM] Failed to load model." << std::endl;

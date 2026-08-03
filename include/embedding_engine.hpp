@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <filesystem>
 #include "llama.h"
 
 class EmbeddingEngine
@@ -21,7 +22,7 @@ public:
   EmbeddingEngine();
   ~EmbeddingEngine();
 
-  bool loadModel(const std::string &modelPath);
+  bool loadModel(const std::filesystem::path &modelPath);
   std::vector<float> generateEmbedding(const std::string &text);
   int getDimension() const { return nEmbd; }
 };

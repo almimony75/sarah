@@ -8,13 +8,13 @@ using namespace sherpa_onnx::cxx;
 TtsEngine::TtsEngine() = default;
 TtsEngine::~TtsEngine() = default;
 
-bool TtsEngine::loadModel(const std::string &modelDir)
+bool TtsEngine::loadModel(const std::filesystem::path &modelDir)
 {
   std::cout << "[TTS] Loading Kokoro ONNX model from: " << modelDir << std::endl;
 
-  const std::vector<std::string> requiredFiles = {
-      modelDir + "/model.onnx", modelDir + "/voices.bin",
-      modelDir + "/tokens.txt"};
+  const std::vector<std::filesystem::path> requiredFiles = {
+      modelDir / "model.onnx", modelDir / "voices.bin",
+      modelDir / "tokens.txt"};
   for (const auto &f : requiredFiles)
   {
     if (!std::filesystem::exists(f))
@@ -23,17 +23,17 @@ bool TtsEngine::loadModel(const std::string &modelDir)
       return false;
     }
   }
-  if (!std::filesystem::is_directory(modelDir + "/espeak-ng-data"))
+  if (!std::filesystem::is_directory(modelDir / "espeak-ng-data"))
   {
     std::cerr << "[TTS] espeak-ng-data directory missing under: " << modelDir << std::endl;
     return false;
   }
 
   OfflineTtsConfig config;
-  config.model.kokoro.model = modelDir + "/model.onnx";
-  config.model.kokoro.voices = modelDir + "/voices.bin";
-  config.model.kokoro.tokens = modelDir + "/tokens.txt";
-  config.model.kokoro.data_dir = modelDir + "/espeak-ng-data";
+  config.model.kokoro.model = modelDir / "model.onnx";
+  config.model.kokoro.voices = modelDir / "voices.bin";
+  config.model.kokoro.tokens = modelDir / "tokens.txt";
+  config.model.kokoro.data_dir = modelDir / "espeak-ng-data";
   config.model.num_threads = 4;
   config.model.debug = 0;
 

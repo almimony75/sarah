@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <filesystem>
 
 class SttEngine
 {
@@ -15,7 +16,7 @@ public:
   SttEngine();
   ~SttEngine();
 
-  bool loadModel(const std::string &modelPath);
+  bool loadModel(const std::filesystem::path &modelPath);
 
   // transcribes raw audio (must be 16kHz, mono, 32-bit float).
   std::string transcribe(const std::vector<float> &audioData);

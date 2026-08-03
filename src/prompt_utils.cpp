@@ -6,7 +6,7 @@
 
 namespace fs = std::filesystem;
 
-std::string loadSystemPrompt(const std::string &path)
+std::string loadSystemPrompt(const std::filesystem::path &path)
 {
   if (!fs::exists(path))
   {

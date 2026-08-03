@@ -20,11 +20,11 @@ long Utilities::elapsedMs(std::chrono::steady_clock::time_point start)
       .count();
 }
 
-nlohmann::json Utilities::loadJsonConfig(const std::string &path)
+nlohmann::json Utilities::loadJsonConfig(const std::filesystem::path &path)
 {
   std::ifstream f(path);
   if (!f.is_open())
-    throw std::runtime_error("Could not open " + path);
+    throw std::runtime_error("Could not open " + path.string());
 
   nlohmann::json j;
   try
@@ -33,7 +33,7 @@ nlohmann::json Utilities::loadJsonConfig(const std::string &path)
   }
   catch (const nlohmann::json::parse_error &e)
   {
-    throw std::runtime_error("Failed to parse " + path + ": " + e.what());
+    throw std::runtime_error("Failed to parse " + path.string() + ": " + e.what());
   }
   return j;
 }

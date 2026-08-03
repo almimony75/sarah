@@ -16,12 +16,12 @@ EmbeddingEngine::~EmbeddingEngine()
 
 void EmbeddingEngine::freeBatch() { llama_batch_free(batch); }
 
-bool EmbeddingEngine::loadModel(const std::string &modelPath)
+bool EmbeddingEngine::loadModel(const std::filesystem::path &modelPath)
 {
   llama_model_params modelParams = llama_model_default_params();
   modelParams.n_gpu_layers = -1; // load every layer onto the GPU
 
-  model = llama_model_load_from_file(modelPath.c_str(), modelParams);
+  model = llama_model_load_from_file(modelPath.string().c_str(), modelParams);
   if (!model)
   {
     std::cerr << "[Error] Failed to load embedding model: " << modelPath << std::endl;

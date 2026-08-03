@@ -1,6 +1,5 @@
 #include "stt_engine.hpp"
 #include "whisper.h"
-#include <filesystem>
 
 SttEngine::SttEngine() {}
 
@@ -10,7 +9,7 @@ SttEngine::~SttEngine()
     whisper_free(ctx);
 }
 
-bool SttEngine::loadModel(const std::string &modelPath)
+bool SttEngine::loadModel(const std::filesystem::path &modelPath)
 {
   if (!std::filesystem::exists(modelPath))
   {
@@ -21,7 +20,7 @@ bool SttEngine::loadModel(const std::string &modelPath)
   whisper_context_params cparams = whisper_context_default_params();
   cparams.use_gpu = true;
 
-  ctx = whisper_init_from_file_with_params(modelPath.c_str(), cparams);
+  ctx = whisper_init_from_file_with_params(modelPath.string().c_str(), cparams);
   if (ctx == nullptr)
   {
     std::cerr << "[STT] Failed to load whisper model from " << modelPath << std::endl;

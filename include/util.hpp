@@ -5,6 +5,7 @@
 #include <chrono>
 #include <nlohmann/json.hpp>
 #include <httplib.h>
+#include <filesystem>
 
 struct WavInfo
 {
@@ -19,7 +20,7 @@ public:
   static void logStep(const std::string &tag, const std::string &msg);
   static long elapsedMs(std::chrono::steady_clock::time_point start);
 
-  static nlohmann::json loadJsonConfig(const std::string &path);
+  static nlohmann::json loadJsonConfig(const std::filesystem::path &path);
   static std::string extractWavFromMultipart(const httplib::Request &req);
 
   // parses a WAV byte buffer into normalized mono float samples in [-1, 1].

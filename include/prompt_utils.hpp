@@ -1,9 +1,10 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <filesystem>
 #include "memory_engine.hpp"
 
-std::string loadSystemPrompt(const std::string &path);
+std::string loadSystemPrompt(const std::filesystem::path &path);
 
 std::string constructPrompt(
     const std::string &systemPrompt,

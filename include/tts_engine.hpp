@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <filesystem>
 
 class TtsEngine
 {
@@ -12,7 +13,7 @@ public:
   TtsEngine();
   ~TtsEngine();
 
-  bool loadModel(const std::string &modelDir);
+  bool loadModel(const std::filesystem::path &modelDir);
 
   // return standard 16-bit PCM WAV bytes, or {} on failure/empty input.
   std::vector<uint8_t> generate(const std::string &text, int voiceId = 0,

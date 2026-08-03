@@ -1,5 +1,6 @@
 #pragma once
 #include "llama.h"
+#include <filesystem>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -25,7 +26,7 @@ public:
   LlmEngine();
   ~LlmEngine();
 
-  bool loadModel(const std::string &modelPath);
+  bool loadModel(const std::filesystem::path &modelPath);
   void clearCache();
   void appendTokens(const std::string &text);
 
