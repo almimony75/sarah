@@ -124,7 +124,8 @@ if [ "$OS" = "macos" ] && [ "$ARCH" = "arm64" ]; then
     sed -i.bak 's/-march=native//g; s/-mtune=native//g' "$ROOT_DIR/CMakeLists.txt"
 elif [ "$OS" = "linux" ] && command -v nvidia-smi >/dev/null 2>&1; then
     info "NVIDIA GPU detected. Enabling CUDA acceleration..."
-    CMAKE_FLAGS="$CMAKE_FLAGS -DGGML_CUDA=ON"
+    CMAKE_FLAGS="$CMAKE_FLAGS -DGGML_CUDA=ON -DSHERPA_ONNX_ENABLE_GPU=ON -DBUILD_SHARED_LIBS=ON -DSHERPA_ONNX_DOWNLOAD_ONNXRUNTIME=ON -DSHERPA_ONNX_USE_PRE_INSTALLED_ONNXRUNTIME_IF_AVAILABLE=OFF"
+    sed -i.bak 's/set(GGML_CUDA OFF CACHE BOOL "" FORCE)/set(GGML_CUDA ON CACHE BOOL "" FORCE)/g' "$ROOT_DIR/CMakeLists.txt"
 else
     info "Defaulting to CPU-only execution."
 fi
