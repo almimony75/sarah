@@ -1,6 +1,7 @@
 #include "tts_engine.hpp"
 #include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <iostream>
 
 using namespace sherpa_onnx::cxx;
@@ -36,7 +37,7 @@ bool TtsEngine::loadModel(const std::filesystem::path &modelDir)
   config.model.kokoro.data_dir = modelDir / "espeak-ng-data";
   config.model.num_threads = 4;
   config.model.debug = 0;
-
+  config.model.provider = "cuda";
   try
   {
     tts = std::make_unique<OfflineTts>(OfflineTts::Create(config));

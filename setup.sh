@@ -115,6 +115,27 @@ pip install "mcp[cli]" fastmcp psutil duckduckgo_search >/dev/null 2>&1
 deactivate
 success "Python environment ready."
 
+# 4.5 Fetch CUDA 12 Compatibility Libraries
+COMPAT_DIR="$ROOT_DIR/lib/cuda_compat"
+COMPAT_URL="https://github.com/almimony75/sarah/releases/download/v1.0-libs/cuda12_arch_compat.tar.gz"
+
+if [ "$OS" = "linux" ] && command -v nvidia-smi >/dev/null 2>&1; then
+    if [ ! -d "$COMPAT_DIR/custom_libs" ]; then
+        info "Downloading CUDA 12 compatibility libraries (1.9 GB). This may take a moment..."
+        mkdir -p "$ROOT_DIR/lib"
+        
+        curl -L -C - -# -o "$ROOT_DIR/lib/compat.tar.gz" "$COMPAT_URL"
+        
+        info "Extracting libraries..."
+        tar -xzf "$ROOT_DIR/lib/compat.tar.gz" -C "$ROOT_DIR/lib/"
+        mv "$ROOT_DIR/lib/custom_libs" "$COMPAT_DIR"
+        rm "$ROOT_DIR/lib/compat.tar.gz"
+        success "CUDA 12 compatibility layer installed."
+    else
+        success "CUDA 12 compatibility layer already present."
+    fi
+fi
+
 # 5. Hardware Auto-Configuration 
 CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Release"
 
