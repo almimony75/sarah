@@ -3,6 +3,7 @@
 #include "mcp_client.hpp"
 #include "memory_engine.hpp"
 #include "prompt_utils.hpp"
+#include "speech_chunker.hpp"
 #include "stt_engine.hpp"
 #include "tts_engine.hpp"
 #include "util.hpp"
@@ -258,10 +259,50 @@ int main()
       int currentTurn = 0, maxTurns = 10;
       std::string finalLlmResponse;
 
+      int voiceId = config["tts"]["voice_id"];
+      float speed = config["tts"]["speed"];
+      bool ttsStarted = false;
+
+      // synthesizes and sends one sentence immediately only the first
+      // call sends tts_start
+      auto speakChunk = [&](const std::string &text)
+      {
+        if (text.empty())
+          return;
+
+        std::vector<uint8_t> wavData = tts.generate(text, voiceId, speed);
+        if (wavData.empty())
+          return;
+
+        if (!ttsStarted)
+        {
+          WavInfo info = Utilities::parseWavHeader(wavData);
+          sendStatus("speaking");
+          sendJson({{"type", "tts_start"}, {"turn_id", turnId}, {"sample_rate", info.sampleRate}, {"encoding", "pcm_s16le"}, {"channels", info.channels}});
+          ttsStarted = true;
+        }
+
+        if (wavData.size() > 44)
+          ws.send(reinterpret_cast<const char *>(wavData.data() + 44), wavData.size() - 44);
+      };
+
       while (currentTurn < maxTurns)
       {
         currentTurn++;
-        std::string llmResponse = llm.generate(prompt, {"<|im_end|>"});
+
+        // Fresh chunker per generate() call each turn in the loop has
+        // its own <think>/<tool_call> state. Sentences that complete
+        // before any <tool_call> tag appears get spoken immediately.
+        SpeechChunker chunker;
+        std::string llmResponse = llm.generate(
+            prompt, {"<|im_end|>"},
+            [&](const std::string &piece)
+            {
+              for (const auto &sentence : chunker.feed(piece))
+                speakChunk(sentence);
+            });
+        for (const auto &sentence : chunker.finish())
+          speakChunk(sentence);
 
         std::vector<std::string> jsonObjects;
         size_t searchPos = 0;
@@ -371,23 +412,11 @@ int main()
       // memory save
       enqueueMemorySave(userText, llmResponse);
 
-      // TTS: text → speech
-      sendStatus("speaking");
-      int voiceId = config["tts"]["voice_id"];
-      float speed = config["tts"]["speed"];
-      std::vector<uint8_t> wavData = tts.generate(llmResponse, voiceId, speed);
-
-      if (wavData.empty())
+      if (!ttsStarted)
       {
-        sendJson({{"type", "error"}, {"turn_id", turnId}, {"code", "tts_failed"}, {"message", "native tts generation failed"}});
+        sendJson({{"type", "error"}, {"turn_id", turnId}, {"code", "tts_failed"}, {"message", "nothing was synthesized for this turn"}});
         return;
       }
-
-      WavInfo info = Utilities::parseWavHeader(wavData);
-      sendJson({{"type", "tts_start"}, {"turn_id", turnId}, {"sample_rate", info.sampleRate}, {"encoding", "pcm_s16le"}, {"channels", info.channels}});
-
-      if (wavData.size() > 44)
-        ws.send(reinterpret_cast<const char *>(wavData.data() + 44), wavData.size() - 44);
 
       sendJson({{"type", "tts_end"}, {"turn_id", turnId}});
     };
