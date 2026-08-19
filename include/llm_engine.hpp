@@ -31,5 +31,6 @@ public:
   void appendTokens(const std::string &text);
 
   std::string generate(const std::string &prompt,
-                       const std::vector<std::string> &stopTokens = {});
+           const std::vector<std::string> &stopTokens = {},
+           const std::function<void(const std::string &)> &onPiece = nullptr);
 };

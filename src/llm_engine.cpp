@@ -85,7 +85,8 @@ std::string LlmEngine::tokenToPiece(llama_token token)
 }
 
 std::string LlmEngine::generate(const std::string &prompt,
-                                const std::vector<std::string> &stopTokens)
+                                const std::vector<std::string> &stopTokens,
+                                const std::function<void(const std::string &)> &onPiece)
 {
   if (!ctx)
     return "";
@@ -176,6 +177,8 @@ std::string LlmEngine::generate(const std::string &prompt,
 
     std::string piece = tokenToPiece(newTokenId);
     response += piece;
+    if (onPiece)
+      onPiece(piece);
     sessionTokens.push_back(newTokenId);
 
     batch.n_tokens = 1;
