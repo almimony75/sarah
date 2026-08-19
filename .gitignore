@@ -10,6 +10,7 @@ Sarah_Core
 
 # vendor stuff cloned automatically by setup.sh
 vendor/
+lib/
 
 # models ownloaded automatically by download_models.sh)
 models/
@@ -31,3 +32,5 @@ compile_logs.txt
 .DS_Store
 Thumbs.db
 memory_db.json
+
+*.wav
