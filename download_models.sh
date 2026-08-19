@@ -9,18 +9,18 @@ log() { echo -e "\n\033[1;35m[download]\033[0m $1"; }
 
 mkdir -p "$MODELS_DIR" "$ROOT_DIR/config"
 
-# 1. Whisper STT (small q8)
+# 1. Whisper STT (small q8) large turbo q5 is faster and better 
 log "Fetching Whisper STT model..."
-if [ ! -f "$MODELS_DIR/ggml-small-q8_0.bin" ]; then
-    wget -q --show-progress -O "$MODELS_DIR/ggml-small-q8_0.bin" \
-      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q8_0.bin"
+if [ ! -f "$MODELS_DIR/ggml-large-v3-turbo-q5_0.bin" ]; then
+    wget -q --show-progress -O "$MODELS_DIR/ggml-large-v3-turbo-q5_0.bin" \
+      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin"
 fi
 
-# 2. LLM (Qwen 3.5 4B Q4_K_S GGUF)
+# 2. LLM (Qwen 3.5 4B Q4_K_M GGUF)
 log "Fetching LLM model..."
-if [ ! -f "$MODELS_DIR/Qwen_Qwen3.5-4B-Q4_K_S.gguf" ]; then
-    wget -q --show-progress -O "$MODELS_DIR/Qwen_Qwen3.5-4B-Q4_K_S.gguf" \
-      "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf"
+if [ ! -f "$MODELS_DIR/Qwen_Qwen3.5-4B-Q4_K_M.gguf" ]; then
+    wget -q --show-progress -O "$MODELS_DIR/Qwen_Qwen3.5-4B-Q4_K_M.gguf" \
+      "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf"
 fi
 
 # 3. Embedding Model (Nomic Embed Text v2 MoE Q8)
@@ -181,4 +181,4 @@ cat > "$ROOT_DIR/config/configuration.json" << EOF
 }
 EOF
 
-log "Setup completed! Run './build/Sarah_Core' from the root directory to launch."
+log "Setup completed! Run './run.sh' from the root directory to launch."
