@@ -150,7 +150,7 @@ int main()
     for (const auto &tool : allDiscoveredTools)
     {
       std::string toolSummary = tool["name"].get<std::string>() + ": " + tool.value("description", "");
-      mem.addMemory("tool_schema", tool.dump(), false, toolSummary);
+      mem.addMemory("","tool_schema", tool.dump(), toolSummary);
     }
 
     // shared state across turns/connections
@@ -182,14 +182,14 @@ int main()
         job(); // run outside the lock
       } });
 
-    auto enqueueMemorySave = [&](std::string userText, std::string llmResponse)
+    auto enqueueMemorySave = [&](const std::string& deviceId, std::string userText, std::string llmResponse)
     {
       {
         std::lock_guard<std::mutex> lk(memQueueMutex);
-        memJobQueue.push([&mem, userText, llmResponse]()
+        memJobQueue.push([&mem, deviceId, userText, llmResponse]()
                          {
-          mem.addMemory("user", userText, false);
-          mem.addMemory("assistant", llmResponse, true); });
+          mem.addMemory(deviceId, "user", userText);
+          mem.addMemory(deviceId, "assistant", llmResponse); });
       }
       memQueueCv.notify_one();
     };
@@ -234,10 +234,9 @@ int main()
         sendJson({{"type", "transcript"}, {"turn_id", turnId}, {"text", userText}});
 
       // Memory / RAG: gather context for the prompt
-      auto recentMems = mem.getRecent(config["memory"]["remember"], "tool_schema");
-      auto queryVec = mem.embedQuery(userText);
-      auto semanticMems = mem.searchByVector(queryVec, config["memory"]["semantic_k"], "");
-      auto relevantTools = mem.searchByVector(queryVec, 10, "tool_schema");
+      auto recentMems = mem.getRecent(deviceId, config["memory"]["remember"], "tool_schema");
+      auto semanticMems = mem.hybridSearch(deviceId, userText, config["memory"]["semantic_k"], "");
+      auto relevantTools = mem.hybridSearch("", userText, 10, "tool_schema");
 
       std::string dynamicToolsPrompt =
           "# Tools\n\nYou may call one or more functions to assist with the user "
@@ -410,7 +409,11 @@ int main()
       Utilities::logStep("Cleanup", "[" + deviceId + "] \"" + llmResponse + "\"");
 
       // memory save
-      enqueueMemorySave(userText, llmResponse);
+      if (!llmResponse.empty()){
+        enqueueMemorySave(deviceId, userText, llmResponse);
+      }else{
+        Utilities::logStep("Memory", "[" + deviceId + "] Skipping save due to empty LLM response.");
+      }
 
       if (!ttsStarted)
       {

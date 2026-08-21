@@ -112,26 +112,11 @@ std::string LlmEngine::generate(const std::string &prompt,
               << "window (" << nCtx << "). Generation will likely fail.\n";
   }
 
-  // 2. smart prefix matching
+  // multi tenant architecture requires a clean KV cache per turn so no more smart prefix matching
+  clearCache();
   size_t nPast = 0;
-  while (nPast < sessionTokens.size() && nPast < promptTokens.size() &&
-         sessionTokens[nPast] == promptTokens[nPast])
-  {
-    nPast++;
-  }
 
-  if (nPast == promptTokens.size() && nPast > 0)
-    nPast--;
-
-  // 3. keep only the pre compute stuff
-  if (nPast < sessionTokens.size())
-  {
-    llama_memory_t mem = llama_get_memory(ctx);
-    llama_memory_seq_rm(mem, 0, nPast, -1);
-    sessionTokens.resize(nPast);
-  }
-
-  // 4. evaluate only the new tokens
+  // 2. evaluate only the new tokens
   int nEvalTotal = promptTokens.size() - nPast;
   int nBatchSize = 1024;
 
@@ -161,7 +146,7 @@ std::string LlmEngine::generate(const std::string &prompt,
 
   sessionTokens = promptTokens;
 
-  // 5. generate output one token at a time
+  // 3. generate output one token at a time
   int cursor = sessionTokens.size();
   int maxGen = 1024;
   int genCount = 0;
