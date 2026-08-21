@@ -55,38 +55,38 @@ std::string constructPrompt(const std::string &systemPrompt,
 {
   std::stringstream ss;
 
+  // 1. System Prompt
   ss << "<|im_start|>system\n"
-     << systemPrompt << "<|im_end|>\n";
-
-  ss << "<|im_start|>user\n";
-
-  if (!recentMemories.empty())
-  {
-    ss << "## Conversation History\n";
-    for (const auto &mem : recentMemories)
-    {
-      ss << sanitizeForPrompt(mem.role) << ": " << sanitizeForPrompt(mem.content) << "\n";
-    }
-    ss << "\n";
-  }
-
+     << systemPrompt << "\n";
+     
   if (!toolsPrompt.empty())
   {
-    ss << toolsPrompt << "\n";
+    ss << "\n" << toolsPrompt << "\n";
   }
 
+  // Inject semantic memories as part of the system context
   if (!semanticMemories.empty())
   {
-    ss << "## Relevant Past Context\n";
+    ss << "\n## Relevant Past Context\n";
     for (const auto &mem : semanticMemories)
     {
       ss << renderBulletLine(mem.content);
     }
-    ss << "\n";
+  }
+  ss << "<|im_end|>\n";
+
+  // 2. Chat History (Properly formatted as distinct turns)
+  for (const auto &mem : recentMemories)
+  {
+    if (mem.role == "user") {
+        ss << "<|im_start|>user\n" << sanitizeForPrompt(mem.content) << "<|im_end|>\n";
+    } else if (mem.role == "assistant") {
+        ss << "<|im_start|>assistant\n" << sanitizeForPrompt(mem.content) << "<|im_end|>\n";
+    }
   }
 
-  ss << "Current Request: " << sanitizeForPrompt(userText) << "<|im_end|>\n";
-
+  // 3. Current Request
+  ss << "<|im_start|>user\n" << sanitizeForPrompt(userText) << "<|im_end|>\n";
   ss << "<|im_start|>assistant\n";
 
   return ss.str();
