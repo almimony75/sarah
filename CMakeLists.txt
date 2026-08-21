@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Sarah_Core LANGUAGES CXX)
+project(Sarah_Core LANGUAGES CXX C) 
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,18 +10,19 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-add_compile_options(
-    -O3
-    -march=native
-    -mtune=native
-)
+# 1. Safely handle optimizations natively instead of using bash `sed`
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+    add_compile_options(-O3)
+else()
+    add_compile_options(-O3 -march=native -mtune=native)
+endif()
 
 ############################################################
 # whisper.cpp
 ############################################################
 
-set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_TESTS OFF CACHE BOOL "")
+set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "")
 
 add_subdirectory(vendor/whisper.cpp)
 
@@ -29,20 +30,13 @@ add_subdirectory(vendor/whisper.cpp)
 # llama.cpp
 ############################################################
 
-set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "")
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "")
+set(LLAMA_BUILD_COMMON OFF CACHE BOOL "")
+set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "")
 
-# CPU backend
-set(GGML_CPU ON CACHE BOOL "" FORCE)
-
-# Disable GPU backends
-set(GGML_CUDA OFF CACHE BOOL "" FORCE)
-set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
-set(GGML_HIP OFF CACHE BOOL "" FORCE)
-set(GGML_METAL OFF CACHE BOOL "" FORCE)
-set(GGML_OPENCL OFF CACHE BOOL "" FORCE)
+# Enable CPU backend by default
+set(GGML_CPU ON CACHE BOOL "")
 
 add_subdirectory(vendor/llama.cpp)
 
@@ -50,10 +44,17 @@ add_subdirectory(vendor/llama.cpp)
 # Sherpa-ONNX
 ############################################################
 
-set(SHERPA_ONNX_ENABLE_TTS ON CACHE BOOL "" FORCE)
-set(SHERPA_ONNX_ENABLE_ASR OFF CACHE BOOL "" FORCE)
+set(SHERPA_ONNX_ENABLE_TTS ON CACHE BOOL "")
+set(SHERPA_ONNX_ENABLE_ASR OFF CACHE BOOL "")
 
 add_subdirectory(vendor/sherpa-onnx)
+
+############################################################
+# SQLite3 (Amalgamation)
+############################################################
+add_library(sqlite3 STATIC vendor/sqlite3/sqlite3.c)
+# This flag is CRITICAL. Without it, Hybrid Search will crash!
+target_compile_definitions(sqlite3 PUBLIC SQLITE_ENABLE_FTS5=1 SQLITE_THREADSAFE=1)
 
 ############################################################
 # Executable
@@ -71,6 +72,7 @@ add_executable(Sarah_Core
     src/tts_engine.cpp
     src/util.cpp
     src/speech_chunker.cpp
+    src/database.cpp
 )
 
 ############################################################
@@ -87,6 +89,7 @@ target_include_directories(Sarah_Core PRIVATE
     vendor/cpp-httplib
     vendor/sherpa-onnx
     vendor/sherpa-onnx/sherpa-onnx
+    vendor/sqlite3
 )
 
 ############################################################
@@ -101,4 +104,5 @@ target_link_libraries(Sarah_Core PRIVATE
     sherpa-onnx-core
     pthread
     dl
+    sqlite3
 )
