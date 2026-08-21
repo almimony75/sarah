@@ -58,7 +58,7 @@ bool MemoryEngine::init(const std::string &embeddingModelPath)
     return false;
   }
   initMemorySchema(db); // builds the FTS5 tables automatically
-
+  initIdentitySchema(db);
   return true;
 }
 
@@ -286,4 +286,35 @@ std::vector<MemoryEntry> MemoryEngine::hybridSearch(const std::string &userId, c
     }
   }
   return finalResults;
+}
+
+std::string MemoryEngine::resolveCanonicalUserId(const std::string &platform,
+                                                 const std::string &platformUserId)
+{
+  std::lock_guard<std::mutex> lock(dataMutex);
+
+  auto stmt = db.prepare(
+      "SELECT canonical_user_id FROM identity_links WHERE platform = ? AND platform_user_id = ?");
+  stmt.bind(1, platform);
+  stmt.bind(2, platformUserId);
+
+  if (stmt.step())
+    return stmt.columnText(0);
+
+  // unlinked platform identity - it's its own canonical user until explicitly linked
+  return platform + ":" + platformUserId;
+}
+
+void MemoryEngine::linkIdentity(const std::string &platform, const std::string &platformUserId,
+                                const std::string &canonicalUserId)
+{
+  std::lock_guard<std::mutex> lock(dataMutex);
+
+  auto stmt = db.prepare(
+      "INSERT OR REPLACE INTO identity_links (platform, platform_user_id, canonical_user_id) "
+      "VALUES (?, ?, ?)");
+  stmt.bind(1, platform);
+  stmt.bind(2, platformUserId);
+  stmt.bind(3, canonicalUserId);
+  stmt.step();
 }

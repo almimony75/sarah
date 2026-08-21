@@ -182,20 +182,22 @@ int main()
         job(); // run outside the lock
       } });
 
-    auto enqueueMemorySave = [&](const std::string& deviceId, std::string userText, std::string llmResponse)
+    auto enqueueMemorySave = [&](const std::string& userId, std::string userText, std::string llmResponse)
     {
-      {
+      if (!llmResponse.empty()) {
         std::lock_guard<std::mutex> lk(memQueueMutex);
-        memJobQueue.push([&mem, deviceId, userText, llmResponse]()
-                         {
-          mem.addMemory(deviceId, "user", userText);
-          mem.addMemory(deviceId, "assistant", llmResponse); });
+        memJobQueue.push([&mem, userId, userText, llmResponse]() {
+          mem.addMemory(userId, "user", userText);
+          mem.addMemory(userId, "assistant", llmResponse);
+        });
+      } else {
+        Utilities::logStep("Memory", "[" + userId + "] Skipping save due to empty LLM response.");
       }
       memQueueCv.notify_one();
     };
 
     // the magic happening here
-    auto processTurn = [&](httplib::ws::WebSocket &ws, const std::string &deviceId,
+    auto processTurn = [&](httplib::ws::WebSocket &ws, const std::string &deviceId, const std::string &userId,
                            const std::string &turnId, std::vector<float> audioFloats)
     {
       auto sendJson = [&](const nlohmann::json &j)
@@ -234,8 +236,8 @@ int main()
         sendJson({{"type", "transcript"}, {"turn_id", turnId}, {"text", userText}});
 
       // Memory / RAG: gather context for the prompt
-      auto recentMems = mem.getRecent(deviceId, config["memory"]["remember"], "tool_schema");
-      auto semanticMems = mem.hybridSearch(deviceId, userText, config["memory"]["semantic_k"], "");
+      auto recentMems = mem.getRecent(userId, config["memory"]["remember"], "tool_schema");
+      auto semanticMems = mem.hybridSearch(userId, userText, config["memory"]["semantic_k"], "");
       auto relevantTools = mem.hybridSearch("", userText, 10, "tool_schema");
 
       std::string dynamicToolsPrompt =
@@ -410,7 +412,7 @@ int main()
 
       // memory save
       if (!llmResponse.empty()){
-        enqueueMemorySave(deviceId, userText, llmResponse);
+        enqueueMemorySave(userId, userText, llmResponse);
       }else{
         Utilities::logStep("Memory", "[" + deviceId + "] Skipping save due to empty LLM response.");
       }
@@ -443,7 +445,8 @@ int main()
         return;
       }
       std::string deviceId = hello.value("device_id", "unknown");
-      Utilities::logStep("WS", "Device connected: " + deviceId);
+      std::string userId = mem.resolveCanonicalUserId("ws", deviceId);
+      Utilities::logStep("WS", "Device connected: " + deviceId + " -> user " + userId);
       ws.send(nlohmann::json{{"type", "hello_ack"}, {"status", "ok"}}.dump());
 
       std::vector<float> audioBuffer;
@@ -467,7 +470,7 @@ int main()
             inTurn = false;
 
             try {
-              processTurn(ws, deviceId, currentTurnId, audioBuffer);
+              processTurn(ws, deviceId, userId, currentTurnId, audioBuffer);
             } catch (const std::exception &e) {
               std::cerr << "[WS] Unhandled exception during turn: " << e.what() << "\n";
               ws.send(nlohmann::json{{"type", "error"}, {"turn_id", currentTurnId},

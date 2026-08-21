@@ -54,3 +54,6 @@ private:
 // creates the memories table + FTS5 shadow index + sync triggers if they
 // don't already exist idempotent safe to call on every startup.
 void initMemorySchema(SqliteDb &db);
+
+// identity for multi social account linking
+void initIdentitySchema(SqliteDb &db);

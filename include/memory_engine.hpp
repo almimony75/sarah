@@ -55,4 +55,8 @@ public:
   std::vector<MemoryEntry> hybridSearch(const std::string &userId, const std::string &query, int k = 3, const std::string &targetRole = "");
   
   std::vector<float> embedQuery(const std::string &query);
+
+  std::string resolveCanonicalUserId(const std::string &platform, const std::string &platformUserId);
+  void linkIdentity(const std::string &platform, const std::string &platformUserId,
+                    const std::string &canonicalUserId);
 };

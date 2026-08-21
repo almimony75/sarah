@@ -149,3 +149,17 @@ void initMemorySchema(SqliteDb &db)
     END;
   )");
 }
+
+void initIdentitySchema(SqliteDb &db)
+{
+  db.exec(R"(
+    CREATE TABLE IF NOT EXISTS identity_links (
+      platform TEXT NOT NULL,
+      platform_user_id TEXT NOT NULL,
+      canonical_user_id TEXT NOT NULL,
+      PRIMARY KEY (platform, platform_user_id)
+    );
+  )");
+
+  db.exec("CREATE INDEX IF NOT EXISTS idx_identity_canonical ON identity_links(canonical_user_id);");
+}
