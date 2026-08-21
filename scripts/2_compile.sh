@@ -14,8 +14,13 @@ success() { echo -e "${GREEN}[✓] $1${NC}"; }
 # Hardware Auto-Configuration (Passed cleanly to CMake)
 CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Release"
 
-OS="$(uname -s)"
+OS="unknown"
 ARCH="$(uname -m)"
+case "$(uname -s)" in
+  Linux)  OS="linux" ;;
+  Darwin) OS="macos" ;;
+  *) OS="$(uname -s)" ;;
+esac
 
 if [ "$OS" = "macos" ] && [ "$ARCH" = "arm64" ]; then
     info "Apple Silicon detected. Enabling Metal acceleration..."
