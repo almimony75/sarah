@@ -29,8 +29,5 @@ __pycache__/
 # logs
 *.log
 compile_logs.txt
-.DS_Store
-Thumbs.db
-memory_db.json
-
+data/
 *.wav
