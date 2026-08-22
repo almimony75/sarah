@@ -73,6 +73,7 @@ add_executable(Sarah_Core
     src/util.cpp
     src/speech_chunker.cpp
     src/database.cpp
+    src/shadow_clone.cpp
 )
 
 ############################################################
