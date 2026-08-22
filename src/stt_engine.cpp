@@ -72,5 +72,9 @@ std::string SttEngine::transcribe(const std::vector<float> &audioData)
     if (text)
       result += text;
   }
+  // trim the leading space that whisper conventionally injects
+    size_t start = result.find_first_not_of(" \t\n\r");
+    size_t end = result.find_last_not_of(" \t\n\r");
+    result = (start == std::string::npos) ? "" : result.substr(start, end - start + 1);
   return result;
 }
