@@ -48,9 +48,10 @@ public:
   ~MemoryEngine();
 
   bool init(const std::string &embeddingModelPath);
-  void addMemory(const std::string &userId, const std::string &role, const std::string &content, const std::string &embedText = "");
+  void addMemory(const std::string &userId, const std::string &role, const std::string &content,
+                 bool indexForSearch = true, const std::string &embedText = "");
 
-  std::vector<MemoryEntry> getRecent(const std::string &userId, size_t n = 10, const std::string &excludeRole = "");
+  std::vector<MemoryEntry> getRecent(const std::string &userId, size_t n = 10);
 
   std::vector<MemoryEntry> hybridSearch(const std::string &userId, const std::string &query, int k = 3, const std::string &targetRole = "");
   
@@ -59,4 +60,6 @@ public:
   std::string resolveCanonicalUserId(const std::string &platform, const std::string &platformUserId);
   void linkIdentity(const std::string &platform, const std::string &platformUserId,
                     const std::string &canonicalUserId);
+  void purgeToolSchemas();
+  bool isDuplicateFact(const std::string &userId, const std::string &factText, float maxDistance = 0.02f);
 };

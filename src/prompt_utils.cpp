@@ -91,3 +91,46 @@ std::string constructPrompt(const std::string &systemPrompt,
 
   return ss.str();
 }
+
+static const char *kCurationSystemPrompt = R"(You are a background data-extraction engine. Your sole purpose is to analyze a conversation snippet between a User and an Assistant, and extract permanent facts worth remembering.
+
+[RULES]
+1. You must extract ONLY permanent user facts: names, locations, core preferences (likes/dislikes), relationships, ongoing projects, or explicit instructions on how the user wants to be treated.
+2. Ignore transient chatter: greetings, questions about the weather, time, temporary states ("I am tired today"), or basic tool requests ("turn on the lights").
+3. If the snippet contains NO permanent facts, you MUST output exactly the word: NONE
+4. If the snippet contains a permanent fact, you MUST output it as a single, concise, third-person factual statement.
+
+[EXAMPLES]
+Input:
+User: "What is the weather in Berlin?"
+Assistant: "It is currently 15 degrees and raining in Berlin."
+Output: NONE
+
+Input:
+User: "I hate mushrooms, never put them in my recipes."
+Assistant: "I will remember that you dislike mushrooms."
+Output: The user strongly dislikes mushrooms and does not want them in recipes.
+
+Input:
+User: "My brother's name is David, he is coming over tomorrow."
+Assistant: "I've noted that David is coming over."
+Output: The user has a brother named David.
+
+[TASK]
+Analyze the following conversation and output either NONE, or the extracted fact. Output ONLY the answer, with no <think> blocks and no introductory text.)";
+
+std::string constructCurationPrompt(const std::string &userText, const std::string &assistantText)
+{
+  std::stringstream ss;
+  ss << "<|im_start|>system\n" << kCurationSystemPrompt << "<|im_end|>\n";
+  ss << "<|im_start|>user\n"
+     << "Input:\n"
+     << "User: \"" << sanitizeForPrompt(userText) << "\"\n"
+     << "Assistant: \"" << sanitizeForPrompt(assistantText) << "\"\n"
+     << "Output:<|im_end|>\n";
+     
+  // THE HACK: Prefill the empty think block to force "Instruct Mode"
+  ss << "<|im_start|>assistant\n<think>\n</think>\n";
+  
+  return ss.str();
+}

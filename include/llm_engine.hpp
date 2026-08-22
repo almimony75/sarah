@@ -30,6 +30,7 @@ public:
   void clearCache();
   void appendTokens(const std::string &text);
 
+  llama_model *getModelHandle() const { return model; }
   std::string generate(const std::string &prompt,
            const std::vector<std::string> &stopTokens = {},
            const std::function<void(const std::string &)> &onPiece = nullptr);

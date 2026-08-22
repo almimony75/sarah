@@ -88,15 +88,22 @@ void MemoryEngine::ensureCapacityLocked()
 }
 
 void MemoryEngine::addMemory(const std::string &userId, const std::string &role, const std::string &content,
-                             const std::string &embedText)
+                             bool indexForSearch, const std::string &embedText)
 {
   int64_t timestampMs = getCurrentTimestampMs();
   std::string timestamp = formatTimestamp(timestampMs);
 
-  // 1. prepare the text for the vector engine
-  std::string textToEmbed = embedText.empty() ? content : embedText;
-  if (textToEmbed.length() > 1800) textToEmbed = textToEmbed.substr(0, 1800);
-  auto vec = embedder.generateEmbedding("search_document: " + textToEmbed);
+  // 1. only pay for an embedding when this entry is meant to be
+  // semantically searchable - raw chatter skips this entirely, which is
+  // the actual mechanism behind keeping hnswlib free of noise (and saves
+  // a real embedding-model inference on every turn otherwise)
+  std::vector<float> vec;
+  if (indexForSearch)
+  {
+    std::string textToEmbed = embedText.empty() ? content : embedText;
+    if (textToEmbed.length() > 1800) textToEmbed = textToEmbed.substr(0, 1800);
+    vec = embedder.generateEmbedding("search_document: " + textToEmbed);
+  }
 
   std::lock_guard<std::mutex> lock(dataMutex);
 
@@ -127,24 +134,21 @@ void MemoryEngine::addMemory(const std::string &userId, const std::string &role,
   }
 }
 
-std::vector<MemoryEntry> MemoryEngine::getRecent(const std::string &userId, size_t n, const std::string &excludeRole)
+std::vector<MemoryEntry> MemoryEngine::getRecent(const std::string &userId, size_t n)
 {
   std::vector<MemoryEntry> result;
   std::lock_guard<std::mutex> lock(dataMutex);
 
-  // directly query SQLite for the N most recent memories for this user
-  std::string sql = "SELECT id, timestamp_ms, timestamp, role, content FROM memories WHERE user_id = ?";
-    if (!excludeRole.empty()) {
-        sql += " AND role != ?";
-    }
-    sql += " ORDER BY id DESC LIMIT ?";
-  
-    auto stmt = db.prepare(sql);
-    stmt.bind(1, userId);
-    
-    int bindIdx = 2;
-    if (!excludeRole.empty()) stmt.bind(bindIdx++, excludeRole);
-    stmt.bind(bindIdx, (int)n);
+  // whitelist rather than blacklist: recent conversational history should
+  // only ever contain actual turns, never tool_schema, fact, or (later)
+  // summary rows - a whitelist stays correct automatically as new
+  // synthetic roles get added, a blacklist would need updating each time
+  auto stmt = db.prepare(
+      "SELECT id, timestamp_ms, timestamp, role, content FROM memories "
+      "WHERE user_id = ? AND role IN ('user', 'assistant') "
+      "ORDER BY id DESC LIMIT ?");
+  stmt.bind(1, userId);
+  stmt.bind(2, (int)n);
 
   while (stmt.step()) {
     result.push_back({
@@ -317,4 +321,55 @@ void MemoryEngine::linkIdentity(const std::string &platform, const std::string &
   stmt.bind(2, platformUserId);
   stmt.bind(3, canonicalUserId);
   stmt.step();
+}
+
+void MemoryEngine::purgeToolSchemas()
+{
+  std::lock_guard<std::mutex> lock(dataMutex);
+
+  auto stmt = db.prepare("SELECT id FROM memories WHERE role = 'tool_schema'");
+  std::vector<long> idsToDelete;
+  while (stmt.step())
+    idsToDelete.push_back((long)stmt.columnInt64(0));
+
+  for (long id : idsToDelete)
+  {
+    try { index->markDelete(id); } catch (...) {} // soft-delete, hnswlib excludes it from future search
+  }
+
+  db.exec("DELETE FROM memories WHERE role = 'tool_schema'");
+}
+
+bool MemoryEngine::isDuplicateFact(const std::string &userId, const std::string &factText, float maxDistance)
+{
+  auto vec = embedder.generateEmbedding("search_document: " + factText);
+  if (vec.empty())
+    return false;
+
+  std::lock_guard<std::mutex> lock(dataMutex);
+  if (index->getCurrentElementCount() == 0)
+    return false;
+
+  size_t searchK = std::min((size_t)10, index->getCurrentElementCount());
+  auto pq = index->searchKnn(vec.data(), searchK);
+
+  bool isDuplicate = false;
+  while (!pq.empty())
+  {
+    float dist = pq.top().first;
+    long id = pq.top().second;
+    pq.pop();
+
+    if (dist >= maxDistance)
+      continue; // Too far away in meaning, not a duplicate
+
+    auto stmt = db.prepare("SELECT role FROM memories WHERE id = ? AND user_id = ?");
+    stmt.bind(1, id);
+    stmt.bind(2, userId);
+    
+    if (stmt.step() && stmt.columnText(0) == "fact") {
+      isDuplicate = true;
+    }
+  }
+  return isDuplicate;
 }

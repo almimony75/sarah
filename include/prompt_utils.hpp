@@ -12,3 +12,5 @@ std::string constructPrompt(
     const std::vector<MemoryEntry> &recentMemories,
     const std::vector<MemoryEntry> &semanticMemories,
     const std::string &userText);
+
+std::string constructCurationPrompt(const std::string &userText, const std::string &assistantText);

@@ -3,6 +3,7 @@
 #include "mcp_client.hpp"
 #include "memory_engine.hpp"
 #include "prompt_utils.hpp"
+#include "shadow_clone.hpp"
 #include "speech_chunker.hpp"
 #include "stt_engine.hpp"
 #include "tts_engine.hpp"
@@ -125,6 +126,14 @@ int main()
     }
     Utilities::logStep("LLM", "Model loaded OK");
 
+    Utilities::logStep("ShadowClone", "Attaching auxiliary context for background curation...");
+    ShadowClone shadowClone;
+    bool curationEnabled = shadowClone.attach(llm.getModelHandle(), 1024);
+    if (!curationEnabled)
+      std::cerr << "  [ShadowClone] FAILED to attach. Memory curation disabled for this session.\n";
+    else
+      Utilities::logStep("ShadowClone", "Attached OK");
+
     Utilities::logStep("Memory", "Initializing memory engine with: " +
                                      config["memory"]["embedding_model"].get<std::string>());
     MemoryEngine mem;
@@ -145,12 +154,13 @@ int main()
     Utilities::logStep("TTS", "Model loaded OK");
 
     // 4. tool RAG: embed every discovered tool's schema once
-    Utilities::logStep("ToolRAG", "Embedding " + std::to_string(allDiscoveredTools.size()) +
-                                      " tools into Semantic Memory...");
+    Utilities::logStep("ToolRAG", "Embedding " + std::to_string(allDiscoveredTools.size()) + " tools into Semantic Memory...");
+    mem.purgeToolSchemas();
+
     for (const auto &tool : allDiscoveredTools)
     {
       std::string toolSummary = tool["name"].get<std::string>() + ": " + tool.value("description", "");
-      mem.addMemory("","tool_schema", tool.dump(), toolSummary);
+      mem.addMemory("", "tool_schema", tool.dump(), true, toolSummary);
     }
 
     // shared state across turns/connections
@@ -182,13 +192,67 @@ int main()
         job(); // run outside the lock
       } });
 
+    // strips ShadowClone output down to a clean fact, or "" if it decided
+    // there's nothing worth remembering. Defensive against a small model
+    // occasionally ignoring the "no preamble" instruction.
+    auto parseCurationOutput = [](const std::string &raw) -> std::string
+    {
+      std::string s = raw;
+      auto trimEdges = [&]()
+      {
+        size_t start = s.find_first_not_of(" \t\n\r\"");
+        size_t end = s.find_last_not_of(" \t\n\r\"");
+        s = (start == std::string::npos) ? "" : s.substr(start, end - start + 1);
+      };
+      trimEdges();
+      if (s.rfind("Output:", 0) == 0)
+      {
+        s = s.substr(7);
+        trimEdges();
+      }
+      std::string upper = s;
+      for (char &c : upper) c = (char)std::toupper((unsigned char)c);
+      if (upper == "NONE" || s.empty())
+        return "";
+      return s;
+    };
+
     auto enqueueMemorySave = [&](const std::string& userId, std::string userText, std::string llmResponse)
     {
       if (!llmResponse.empty()) {
         std::lock_guard<std::mutex> lk(memQueueMutex);
-        memJobQueue.push([&mem, userId, userText, llmResponse]() {
-          mem.addMemory(userId, "user", userText);
-          mem.addMemory(userId, "assistant", llmResponse);
+        memJobQueue.push([&mem, &llm, &shadowClone, &engineMutex, &parseCurationOutput,
+                          curationEnabled, userId, userText, llmResponse]() {
+          // raw turns always land in SQLite for getRecent() - never
+          // embedded, that's the whole point of curation: keep hnswlib
+          // free of "what time is it"-style chatter.
+          mem.addMemory(userId, "user", userText, false);
+          mem.addMemory(userId, "assistant", llmResponse, false);
+
+          if (!curationEnabled)
+            return;
+
+          std::string curationPrompt = constructCurationPrompt(userText, llmResponse);
+
+          std::string rawOutput;
+          {
+            // shares the GPU with live turns - never let curation run
+            // concurrently with a user-facing generation or it steals
+            // cycles and shows up as latency jitter mid-turn.
+            std::lock_guard<std::mutex> engineLock(engineMutex);
+            rawOutput = shadowClone.run(curationPrompt, 400);
+          }
+
+          std::string fact = parseCurationOutput(rawOutput);
+          if (!fact.empty())
+          {
+            if (mem.isDuplicateFact(userId, fact, 0.02f)){
+              Utilities::logStep("ShadowClone", "[" + userId + "] Duplicate skipped: \"" + fact + "\"");
+            }else {
+              Utilities::logStep("ShadowClone", "[" + userId + "] Curated Fact: \"" + fact + "\"");
+              mem.addMemory(userId, "fact", fact, true);
+            }
+          }
         });
       } else {
         Utilities::logStep("Memory", "[" + userId + "] Skipping save due to empty LLM response.");
@@ -236,7 +300,7 @@ int main()
         sendJson({{"type", "transcript"}, {"turn_id", turnId}, {"text", userText}});
 
       // Memory / RAG: gather context for the prompt
-      auto recentMems = mem.getRecent(userId, config["memory"]["remember"], "tool_schema");
+      auto recentMems = mem.getRecent(userId, config["memory"]["remember"]);
       auto semanticMems = mem.hybridSearch(userId, userText, config["memory"]["semantic_k"], "");
       auto relevantTools = mem.hybridSearch("", userText, 10, "tool_schema");
 
