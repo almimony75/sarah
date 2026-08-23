@@ -31,3 +31,4 @@ __pycache__/
 compile_logs.txt
 data/
 *.wav
+test/
