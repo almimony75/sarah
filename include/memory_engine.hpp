@@ -62,4 +62,16 @@ public:
                     const std::string &canonicalUserId);
   void purgeToolSchemas();
   bool isDuplicateFact(const std::string &userId, const std::string &factText, float maxDistance = 0.02f);
+  
+  // deterministic user profile (Honcho-lite) - always injected into the
+  // prompt, never gated on vector similarity like semanticMems is
+  std::string getUserProfile(const std::string &userId);
+  void setUserProfile(const std::string &userId,
+                      const std::string &profileText);
+
+  // cross-session summarization bookkeeping
+  long getSummarizationWatermark(const std::string &userId);
+  void setSummarizationWatermark(const std::string &userId, long lastId);
+  std::vector<MemoryEntry> getTurnsSince(const std::string &userId,
+                                         long afterId, size_t limit);
 };

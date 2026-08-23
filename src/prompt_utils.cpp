@@ -49,6 +49,7 @@ static std::string renderBulletLine(const std::string &content)
 
 std::string constructPrompt(const std::string &systemPrompt,
                             const std::string &toolsPrompt,
+                            const std::string &userProfile,
                             const std::vector<MemoryEntry> &recentMemories,
                             const std::vector<MemoryEntry> &semanticMemories,
                             const std::string &userText)
@@ -62,6 +63,16 @@ std::string constructPrompt(const std::string &systemPrompt,
   if (!toolsPrompt.empty())
   {
     ss << "\n" << toolsPrompt << "\n";
+  }
+
+  // Deterministic profile block - always present when one exists, unlike
+  // semanticMemories which only shows up when it's a vector match for
+  // this specific query. This is the "Honcho-lite" piece: Sarah should
+  // know your name/preferences on turn one, not only when they happen to
+  // be semantically close to what you just asked.
+  if (!userProfile.empty())
+  {
+    ss << "\n## User Profile\n" << sanitizeForPrompt(userProfile) << "\n";
   }
 
   // Inject semantic memories as part of the system context
@@ -132,5 +143,60 @@ std::string constructCurationPrompt(const std::string &userText, const std::stri
   // THE HACK: Prefill the empty think block to force "Instruct Mode"
   ss << "<|im_start|>assistant\n<think>\n</think>\n";
   
+  return ss.str();
+}
+
+static const char *kProfileSystemPrompt = R"(You maintain a short, factual profile of a user for an AI assistant to reference. You will be given the user's CURRENT PROFILE and a NEW FACT that was just learned about them.
+
+[RULES]
+1. Merge the new fact into the profile, keeping it concise - a few short lines, third person, no commentary.
+2. If the new fact updates or contradicts something already in the profile (e.g. a changed preference or location), replace the old information rather than keeping both.
+3. If the new fact is already covered by the profile, output the profile unchanged.
+4. Never invent facts that were not given to you.
+
+[TASK]
+Output ONLY the updated profile text, with no <think> blocks and no introductory text.)";
+
+std::string constructProfilePrompt(const std::string &existingProfile, const std::string &newFact)
+{
+  std::stringstream ss;
+  ss << "<|im_start|>system\n" << kProfileSystemPrompt << "<|im_end|>\n";
+  ss << "<|im_start|>user\n"
+     << "CURRENT PROFILE:\n"
+     << (existingProfile.empty() ? "(empty - no profile yet)" : sanitizeForPrompt(existingProfile)) << "\n\n"
+     << "NEW FACT:\n" << sanitizeForPrompt(newFact) << "\n<|im_end|>\n";
+
+  // THE HACK: same prefill trick as curation - forces Qwen into instruct
+  // mode instead of drifting into a <think> block we'd have to strip.
+  ss << "<|im_start|>assistant\n<think>\n</think>\n";
+  return ss.str();
+}
+
+static const char *kSummarySystemPrompt = R"(You compress a stretch of conversation between a User and an Assistant into one dense paragraph for long-term memory. Write in third person, past tense, focused on what was discussed or decided - not word-for-word dialogue.
+
+[RULES]
+1. Keep it to 2-4 sentences.
+2. Do not include small talk, greetings, or filler - focus on substance: topics discussed, questions answered, requests made.
+3. If the conversation genuinely contains nothing worth remembering, output exactly: NONE
+
+[TASK]
+Output ONLY the summary text, with no <think> blocks and no introductory text.)";
+
+std::string constructSummarizationPrompt(const std::vector<MemoryEntry> &turns)
+{
+  std::stringstream ss;
+  ss << "<|im_start|>system\n" << kSummarySystemPrompt << "<|im_end|>\n";
+  ss << "<|im_start|>user\nConversation:\n";
+  for (const auto &t : turns)
+  {
+    if (t.role == "user")
+      ss << "User: \"" << sanitizeForPrompt(t.content) << "\"\n";
+    else if (t.role == "assistant")
+      ss << "Assistant: \"" << sanitizeForPrompt(t.content) << "\"\n";
+  }
+  ss << "<|im_end|>\n";
+
+  // THE HACK: same prefill trick again.
+  ss << "<|im_start|>assistant\n<think>\n</think>\n";
   return ss.str();
 }

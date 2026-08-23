@@ -163,3 +163,23 @@ void initIdentitySchema(SqliteDb &db)
 
   db.exec("CREATE INDEX IF NOT EXISTS idx_identity_canonical ON identity_links(canonical_user_id);");
 }
+
+void initProfileSchema(SqliteDb &db)
+{
+  db.exec(R"(
+    CREATE TABLE IF NOT EXISTS user_profiles (
+      user_id TEXT PRIMARY KEY,
+      profile_text TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL DEFAULT 0
+    );
+  )");
+
+  // tracks the highest memories.id already folded into a summary per user,
+  // so runSummarizationIfDue never re-examines the same chunk twice
+  db.exec(R"(
+    CREATE TABLE IF NOT EXISTS summary_state (
+      user_id TEXT PRIMARY KEY,
+      last_summarized_id INTEGER NOT NULL DEFAULT 0
+    );
+  )");
+}

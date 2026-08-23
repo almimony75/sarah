@@ -145,6 +145,7 @@ bool TurnEngine::init(const nlohmann::json &cfg, const std::string &sysPrompt) {
 }
 
 std::string TurnEngine::transcribe(const std::vector<float> &audioFloats) {
+  std::lock_guard<std::mutex> lock(engineMutex);
   return stt.transcribe(audioFloats);
 }
 
@@ -154,10 +155,10 @@ TurnEngine::resolveCanonicalUserId(const std::string &platform,
   return mem.resolveCanonicalUserId(platform, platformUserId);
 }
 
-// strips ShadowClone output down to a clean fact, or "" if it decided
-// there's nothing worth remembering. Defensive against a small model
-// occasionally ignoring the "no preamble" instruction.
-std::string TurnEngine::parseCurationOutput(const std::string &raw) {
+// trims whitespace/quotes and strips a leading "Output:" echo some 4B
+// outputs produce despite being told not to - shared by every ShadowClone
+// consumer (curation, profile, summarization).
+std::string TurnEngine::stripModelPreamble(const std::string &raw) {
   std::string s = raw;
   auto trimEdges = [&]() {
     size_t start = s.find_first_not_of(" \t\n\r\"");
@@ -169,12 +170,79 @@ std::string TurnEngine::parseCurationOutput(const std::string &raw) {
     s = s.substr(7);
     trimEdges();
   }
+  return s;
+}
+
+// strips ShadowClone output down to a clean fact/summary, or "" if it
+// decided there's nothing worth remembering (both curation and
+// summarization share the same NONE contract).
+std::string TurnEngine::parseCurationOutput(const std::string &raw) {
+  std::string s = stripModelPreamble(raw);
   std::string upper = s;
   for (char &c : upper)
     c = (char)std::toupper((unsigned char)c);
   if (upper == "NONE" || s.empty())
     return "";
   return s;
+}
+
+// Pillar 2: fold one new fact into the deterministic per-user profile.
+void TurnEngine::updateUserProfile(const std::string &userId,
+                                   const std::string &newFact) {
+  std::string existingProfile = mem.getUserProfile(userId);
+  std::string profilePrompt = constructProfilePrompt(existingProfile, newFact);
+
+  std::string rawOutput;
+  {
+    // same GPU-contention guard as curation - never run concurrently with
+    // a live turn's generation.
+    std::lock_guard<std::mutex> engineLock(engineMutex);
+    rawOutput = shadowClone.run(profilePrompt, 150);
+  }
+
+  std::string updatedProfile = stripModelPreamble(rawOutput);
+  if (updatedProfile.empty())
+    return; // decode failure or empty output - don't clobber a good profile
+            // with nothing
+
+  Utilities::logStep("ShadowClone", "[" + userId + "] Profile updated.");
+  mem.setUserProfile(userId, updatedProfile);
+}
+
+// Pillar 3: once enough fresh raw turns have piled up since the last
+// summary, compress them into one embedded summary entry.
+void TurnEngine::runSummarizationIfDue(const std::string &userId) {
+  long watermark = mem.getSummarizationWatermark(userId);
+  auto turns = mem.getTurnsSince(userId, watermark, kSummarizationChunkSize);
+
+  if (turns.size() < kSummarizationChunkSize)
+    return; // not enough fresh turns yet - check again next turn
+
+  std::string summaryPrompt = constructSummarizationPrompt(turns);
+
+  std::string rawOutput;
+  {
+    std::lock_guard<std::mutex> engineLock(engineMutex);
+    rawOutput = shadowClone.run(summaryPrompt, 150);
+  }
+
+  std::string summary =
+      parseCurationOutput(rawOutput); // same NONE contract as curation
+  long newWatermark = turns.back().id;
+
+  if (!summary.empty()) {
+    Utilities::logStep("ShadowClone", "[" + userId + "] Summarized " +
+                                          std::to_string(turns.size()) +
+                                          " turns: \"" + summary + "\"");
+    mem.addMemory(userId, "summary", summary, true);
+  } else {
+    Utilities::logStep("ShadowClone",
+                       "[" + userId + "] Chunk had nothing worth summarizing.");
+  }
+
+  // advance the watermark either way - a filler chunk shouldn't be
+  // re-examined forever just because it produced NONE
+  mem.setSummarizationWatermark(userId, newWatermark);
 }
 
 void TurnEngine::enqueueMemorySave(const std::string &userId,
@@ -207,7 +275,7 @@ void TurnEngine::enqueueMemorySave(const std::string &userId,
         // concurrently with a user-facing generation or it steals
         // cycles and shows up as latency jitter mid-turn.
         std::lock_guard<std::mutex> engineLock(engineMutex);
-        rawOutput = shadowClone.run(curationPrompt, 400);
+        rawOutput = shadowClone.run(curationPrompt, 150);
       }
 
       std::string fact = parseCurationOutput(rawOutput);
@@ -220,8 +288,13 @@ void TurnEngine::enqueueMemorySave(const std::string &userId,
           Utilities::logStep("ShadowClone",
                              "[" + userId + "] Curated Fact: \"" + fact + "\"");
           mem.addMemory(userId, "fact", fact, true);
+          updateUserProfile(userId,
+                            fact); // Pillar 2 - only for genuinely new facts
         }
       }
+
+      runSummarizationIfDue(
+          userId); // Pillar 3 - checked every turn, only fires when due
     });
   }
   memQueueCv.notify_one();
@@ -254,6 +327,8 @@ TurnResult TurnEngine::runTurn(
   auto semanticMems =
       mem.hybridSearch(userId, userText, config["memory"]["semantic_k"], "");
   auto relevantTools = mem.hybridSearch("", userText, 10, "tool_schema");
+  std::string userProfile =
+      mem.getUserProfile(userId); // deterministic - not retrieval-gated
 
   std::string dynamicToolsPrompt =
       "# Tools\n\nYou may call one or more functions to assist with the user "
@@ -268,8 +343,9 @@ TurnResult TurnEngine::runTurn(
       "tags:\n<tool_call>\n{\"name\": \"<function-name>\", \"arguments\": "
       "<args-json-object>}\n</tool_call>\n";
 
-  std::string prompt = constructPrompt(systemPrompt, dynamicToolsPrompt,
-                                       recentMems, semanticMems, userText);
+  std::string prompt =
+      constructPrompt(systemPrompt, dynamicToolsPrompt, userProfile, recentMems,
+                      semanticMems, userText);
 
   // agentic tool calling loop
   sendStatus("thinking");

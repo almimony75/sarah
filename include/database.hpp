@@ -57,3 +57,7 @@ void initMemorySchema(SqliteDb &db);
 
 // identity for multi social account linking
 void initIdentitySchema(SqliteDb &db);
+
+// deterministic user profile (Honcho-lite) + the watermark tracking how
+// far cross-session summarization has progressed per user
+void initProfileSchema(SqliteDb &db);

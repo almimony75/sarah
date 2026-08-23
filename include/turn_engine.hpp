@@ -81,4 +81,15 @@ private:
   void enqueueMemorySave(const std::string &userId, std::string userText,
                          std::string llmResponse);
   static std::string parseCurationOutput(const std::string &raw);
+  static std::string stripModelPreamble(const std::string &raw);
+
+  // Pillar 2 (Profiler): folds one new curated fact into the deterministic
+  // per-user profile. Only called for genuinely new (non-duplicate) facts.
+  void updateUserProfile(const std::string &userId, const std::string &newFact);
+
+  // Pillar 3 (Archivist): once kSummarizationChunkSize fresh raw turns have
+  // accumulated since the last summary, compress them into one embedded
+  // summary entry and advance the watermark.
+  static constexpr size_t kSummarizationChunkSize = 20;
+  void runSummarizationIfDue(const std::string &userId);
 };

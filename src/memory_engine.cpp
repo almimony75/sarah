@@ -59,6 +59,7 @@ bool MemoryEngine::init(const std::string &embeddingModelPath)
   }
   initMemorySchema(db); // builds the FTS5 tables automatically
   initIdentitySchema(db);
+  initProfileSchema(db);
   return true;
 }
 
@@ -372,4 +373,75 @@ bool MemoryEngine::isDuplicateFact(const std::string &userId, const std::string 
     }
   }
   return isDuplicate;
+}
+
+std::string MemoryEngine::getUserProfile(const std::string &userId) {
+  std::lock_guard<std::mutex> lock(dataMutex);
+
+  auto stmt =
+      db.prepare("SELECT profile_text FROM user_profiles WHERE user_id = ?");
+  stmt.bind(1, userId);
+
+  if (stmt.step())
+    return stmt.columnText(0);
+  return ""; // no profile yet - perfectly normal for a new user
+}
+
+void MemoryEngine::setUserProfile(const std::string &userId,
+                                  const std::string &profileText) {
+  std::lock_guard<std::mutex> lock(dataMutex);
+
+  auto stmt = db.prepare("INSERT OR REPLACE INTO user_profiles (user_id, "
+                         "profile_text, updated_at) VALUES (?, ?, ?)");
+  stmt.bind(1, userId);
+  stmt.bind(2, profileText);
+  stmt.bind(3, getCurrentTimestampMs());
+  stmt.step();
+}
+
+long MemoryEngine::getSummarizationWatermark(const std::string &userId) {
+  std::lock_guard<std::mutex> lock(dataMutex);
+
+  auto stmt = db.prepare(
+      "SELECT last_summarized_id FROM summary_state WHERE user_id = ?");
+  stmt.bind(1, userId);
+
+  if (stmt.step())
+    return (long)stmt.columnInt64(0);
+  return 0; // nothing summarized yet - start from the very first turn
+}
+
+void MemoryEngine::setSummarizationWatermark(const std::string &userId,
+                                             long lastId) {
+  std::lock_guard<std::mutex> lock(dataMutex);
+
+  auto stmt = db.prepare("INSERT OR REPLACE INTO summary_state (user_id, "
+                         "last_summarized_id) VALUES (?, ?)");
+  stmt.bind(1, userId);
+  stmt.bind(2, (long long)lastId);
+  stmt.step();
+}
+
+std::vector<MemoryEntry> MemoryEngine::getTurnsSince(const std::string &userId,
+                                                     long afterId,
+                                                     size_t limit) {
+  std::vector<MemoryEntry> result;
+  std::lock_guard<std::mutex> lock(dataMutex);
+
+  // same role whitelist as getRecent - summarization only ever consumes
+  // actual conversation turns, never facts/summaries/tool_schema rows
+  auto stmt = db.prepare(
+      "SELECT id, timestamp_ms, timestamp, role, content FROM memories "
+      "WHERE user_id = ? AND role IN ('user', 'assistant') AND id > ? "
+      "ORDER BY id ASC LIMIT ?");
+  stmt.bind(1, userId);
+  stmt.bind(2, (long long)afterId);
+  stmt.bind(3, (int)limit);
+
+  while (stmt.step()) {
+    result.push_back({stmt.columnInt64(0), userId, stmt.columnInt64(1),
+                      stmt.columnText(2), stmt.columnText(3),
+                      stmt.columnText(4)});
+  }
+  return result;
 }
