@@ -47,6 +47,56 @@ int main() {
     svr.Get("/health", [](const httplib::Request &, httplib::Response &res) {
       res.set_content("OK", "text/plain");
     });
+    // Text-in, text-out endpoint for platform adapters telegram, discord
+    // that run as separate processes and speak plain HTTP.
+    // Same runTurn() as the WS path this is the entry point that proves
+    // the TurnEngine split actually decoupled things correctly Voice-memo
+    // input (audioBase64) isn't wired up yet  engine.transcribe() is
+    // already exposed and ready for that when it's needed.
+    svr.Post("/turn", [&](const httplib::Request &req, httplib::Response &res) {
+      auto body = nlohmann::json::parse(req.body, nullptr, false);
+      if (body.is_discarded()) {
+        res.status = 400;
+        res.set_content(nlohmann::json{{"error", "invalid_json"}}.dump(),
+                        "application/json");
+        return;
+      }
+
+      std::string platform = body.value("platform", "");
+      std::string platformUserId = body.value("platform_user_id", "");
+      std::string text = body.value("text", "");
+
+      if (platform.empty() || platformUserId.empty() || text.empty()) {
+        res.status = 400;
+        res.set_content(
+            nlohmann::json{
+                {"error", "missing_fields"},
+                {"required", {"platform", "platform_user_id", "text"}}}
+                .dump(),
+            "application/json");
+        return;
+      }
+
+      std::string userId =
+          engine.resolveCanonicalUserId(platform, platformUserId);
+      Utilities::logStep("HTTP", "[" + platform + ":" + platformUserId +
+                                     "] -> user " + userId);
+
+      try {
+        // no status/audio callbacks - a text adapter has nothing to stream
+        // to, it just wants the final answer once generation completes.
+        TurnResult result =
+            engine.runTurn(userId, text, nullptr, nullptr, nullptr);
+        res.set_content(nlohmann::json{{"text", result.finalText}}.dump(),
+                        "application/json");
+      } catch (const std::exception &e) {
+        std::cerr << "[HTTP] Unhandled exception during /turn: " << e.what()
+                  << "\n";
+        res.status = 500;
+        res.set_content(nlohmann::json{{"error", "internal_error"}}.dump(),
+                        "application/json");
+      }
+    });
 
     constexpr size_t kMaxAudioSamples = 16000 * 60;
 
